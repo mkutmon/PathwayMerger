@@ -1,0 +1,5 @@
+pathway.dir=C:/Users/martina.kutmon/Data/WikiPathways/2015-05-29-WP_HSA
+output.file=C:/Users/martina.kutmon/Data/WikiPathways/human-network.xgmml
+gene.bridgedb=C:/Users/martina.kutmon/Data/BridgeDb/Hs_Derby_20130701.bridge
+metabolite.bridgedb=C:/Users/martina.kutmon/Data/BridgeDb/metabolites_20140516.bridge
+log.file=output.log
