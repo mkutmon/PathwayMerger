@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<project name="PathwayMerger" default="jar" basedir=".">
+
+	<property name="src.dir" value="src"/>
+	<property name="lib.dir" value="lib"/>
+	<property name="build.dir" value="build"/>
+	<property name="jar.name" value="${ant.project.name}.jar"/>
+	
+	<path id="project.class.path">
+		<fileset dir="${lib.dir}">
+			<include name="com.springsource.org.jdom-1.1.0.jar"/>
+			<include name="derby.jar"/>
+			<include name="org.bridgedb.bio.jar"/>
+			<include name="org.bridgedb.jar"/>
+			<include name="org.bridgedb.rdb.jar"/>
+			<include name="org.pathvisio.core.jar"/>
+		</fileset>
+	</path>
+	
+	<target name="clean">
+		<delete dir="${build.dir}"/>
+		<delete file="${jar.name}"/>
+	</target>
+	
+	<target name="prepare">
+		<mkdir dir="${build.dir}"/>
+	</target>
+	
+	<target name="compile" depends="prepare">
+		<echo>Compiling: ${jar.name}</echo>
+		<javac srcdir="${src.dir}" includes="**" destdir="${build.dir}" debug="true">
+			<classpath refid="project.class.path"/>
+		</javac>
+	</target>
+	
+	<target name="jar" depends="compile"> 
+		<echo>Creating JAR: ${jar.name}</echo>
+		<unjar src="${lib.dir}/com.springsource.org.jdom-1.1.0.jar" dest="${build.dir}"/>
+		<unjar src="${lib.dir}/derby.jar" dest="${build.dir}"/>
+		<unjar src="${lib.dir}/org.bridgedb.bio.jar" dest="${build.dir}"/>
+		<unjar src="${lib.dir}/org.bridgedb.jar" dest="${build.dir}"/>
+		<unjar src="${lib.dir}/org.bridgedb.rdb.jar" dest="${build.dir}"/>
+		<unjar src="${lib.dir}/org.pathvisio.core.jar" dest="${build.dir}"/>
+		<jar jarfile="${jar.name}">
+			<manifest>
+               			<attribute name="Main-Class" value="org.pathvisio.merger.PathwayMerger"/>
+            		</manifest>
+			<fileset dir="build">
+				<include name="**/*.class"/>
+			</fileset>
+		</jar>
+	</target>
+</project>
