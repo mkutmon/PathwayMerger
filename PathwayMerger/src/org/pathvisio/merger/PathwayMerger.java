@@ -1,8 +1,10 @@
 package org.pathvisio.merger;
+
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,7 +19,7 @@ import org.bridgedb.DataSource;
 import org.bridgedb.IDMapper;
 import org.bridgedb.IDMapperException;
 import org.bridgedb.Xref;
-import org.bridgedb.bio.BioDataSource;
+import org.bridgedb.bio.DataSourceTxt;
 import org.pathvisio.core.model.ConverterException;
 import org.pathvisio.core.model.MGroup;
 import org.pathvisio.core.model.MLine;
@@ -50,6 +52,8 @@ public class PathwayMerger {
 	private static String METABOLITE_BRIDGEDB = "metabolite.bridgedb";
 	private static String LOG_FILE = "log.file";
 	
+	private static BufferedWriter log;
+	
 	public static void main (String [] args) throws Exception {
 		if(args.length == 1) {
 			File propsFile = new File(args[0]);
@@ -58,7 +62,7 @@ public class PathwayMerger {
 				props.load(new FileReader(new File(args[0])));
 				
 				logFile = new File(props.getProperty(LOG_FILE));
-				BufferedWriter log = new BufferedWriter(new FileWriter(logFile));
+				log = new BufferedWriter(new FileWriter(logFile));
 				
 				PathwayMerger gen = new PathwayMerger();
 				gen.init();
@@ -80,8 +84,7 @@ public class PathwayMerger {
 		bridgedbGene = new File(props.getProperty(GENE_BRIDGEDB));
 		bridgedbMetabolites = new File(props.getProperty(METABOLITE_BRIDGEDB));
 
-		BioDataSource.init();
-		Class.forName("org.bridgedb.rdb.IDMapperRdb");
+		
 		nodes = new HashMap<String, Node>();
 		map = new HashMap<PathwayElement, Node>();
 		edges = new HashMap<String, Edge>();
@@ -94,18 +97,28 @@ public class PathwayMerger {
 	private Map<PathwayElement, Node> map;
 	private Map<String, Edge> edges;
 	
-	public Graph createNetwork() throws IDMapperException, ConverterException {
+	public Graph createNetwork() throws IDMapperException, ConverterException, IOException {
 		pathways = readPathways(directory);
+		log.write("Parsing pathways from " + directory.getAbsolutePath() + "\n... containing " + pathways.size() + " pathways.");
 		for(Pathway pathway : pathways) {
+			log.write("\n> Parse pathway " + pathway.getMappInfo().getMapInfoName() + " with " + pathway.getDataObjects().size() + " pathway elements.\n");
+			int genes = 0;
+			int metabolites = 0;
+			int pathways = 0;
+			int groups = 0;
+			int edges = 0;
 			for(PathwayElement e : pathway.getDataObjects()) {
 				if(e.getXref() != null && !e.getXref().getId().equals("") && e.getXref().getDataSource() != null) {
 					if(e.getDataNodeType().equals("GeneProduct") || e.getDataNodeType().equals("Protein")) {
 						// all genes and proteins are mapped to Ensembl
+						genes++;
 						createNode(e, geneMapper, "En", pathway);
 					} else if(e.getDataNodeType().equals("Metabolite")) {
 						// all metabolites are mapped to HMDB
+						metabolites++;
 						createNode(e, metMapper, "Ch", pathway);
 					} else if(e.getDataNodeType().equals("Pathway")) {
+						pathways++;
 						createNode(e, null, "Wp", pathway);
 					}
 				} else {
@@ -114,14 +127,22 @@ public class PathwayMerger {
 			}
 			for(PathwayElement e : pathway.getDataObjects()) {
 				if(e.getObjectType().equals(ObjectType.GROUP)) {
+					groups++;
 					createGroup(e, pathway);
 				}
 			}
 			for(PathwayElement e : pathway.getDataObjects()) {
 				if(e.getObjectType().equals(ObjectType.LINE)) {
+					edges++;
 					createEdge(e, pathway);
 				}
 			}
+			log.write("\tGene count: " + genes + "\n");
+			log.write("\tMetabolite count: " + metabolites + "\n");
+			log.write("\tPathway count: " + pathways + "\n");
+			log.write("\tGroup count: " + groups + "\n");
+			log.write("\tEdge count: " + edges + "\n");
+			log.write("\n\n");
 		}
 		
 		for(Pathway p : pathways) {
@@ -129,6 +150,7 @@ public class PathwayMerger {
 		}
 		
 		System.out.println("Conversion finished with " + nodes.size() + " nodes and " + edges.size() + " edges.");
+		log.write("\n\nConversion finished with " + nodes.size() + " nodes and " + edges.size() + " edges.");
 		return graph;
 	}
 	
@@ -287,7 +309,7 @@ public class PathwayMerger {
 				if(syscode.equals(systemCode)) {
 					unifiedId = e.getXref();
 				} else {
-					Set<Xref> res = mapper.mapID(e.getXref(), DataSource.getBySystemCode(systemCode));
+					Set<Xref> res = mapper.mapID(e.getXref(), DataSource.getExistingBySystemCode(systemCode));
 					if(res.size() != 0) {
 						unifiedId = res.iterator().next();
 					}
@@ -368,7 +390,10 @@ public class PathwayMerger {
 		return list;
 	}
 	
-	private void init() throws IDMapperException {
+	private void init() throws IDMapperException, ClassNotFoundException {
+		DataSourceTxt.init();
+		Class.forName("org.bridgedb.rdb.IDMapperRdb");
+		
 		geneMapper = BridgeDb.connect("idmapper-pgdb:" + bridgedbGene.getAbsolutePath());
 		metMapper = BridgeDb.connect("idmapper-pgdb:" + bridgedbMetabolites.getAbsolutePath());
 		geneAttr = (AttributeMapper) geneMapper;
