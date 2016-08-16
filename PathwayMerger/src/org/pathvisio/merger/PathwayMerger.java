@@ -45,12 +45,14 @@ public class PathwayMerger {
 	private AttributeMapper geneAttr;
 	private IDMapper geneMapper;
 	private IDMapper metMapper;
+	private static boolean associations = false;
 	
 	private static String PATHWAY_DIR = "pathway.dir";
 	private static String OUTPUT_FILE = "output.file";
 	private static String GENE_BRIDGEDB = "gene.bridgedb";
 	private static String METABOLITE_BRIDGEDB = "metabolite.bridgedb";
 	private static String LOG_FILE = "log.file";
+	private static String ASSOCIATIONS = "associations";
 	
 	private static BufferedWriter log;
 	
@@ -61,12 +63,24 @@ public class PathwayMerger {
 				props = new Properties();
 				props.load(new FileReader(new File(args[0])));
 				
+				if(props.getProperty(ASSOCIATIONS) != null) {
+					if(props.getProperty(ASSOCIATIONS).equals("true")) {
+						associations = true;
+					}
+				}
+				
 				logFile = new File(props.getProperty(LOG_FILE));
 				log = new BufferedWriter(new FileWriter(logFile));
 				
 				PathwayMerger gen = new PathwayMerger();
 				gen.init();
-				Graph graph = gen.createNetwork();
+				Graph graph;
+				System.out.println(associations);
+				if(!associations) {
+					graph = gen.createNetwork();
+				} else {
+					graph = gen.createAssociationsNetwork();
+				}
 				
 				File output = new File(props.getProperty(OUTPUT_FILE));
 				XGMMLWriter.write(graph, new PrintWriter(output));
@@ -97,7 +111,45 @@ public class PathwayMerger {
 	private Map<PathwayElement, Node> map;
 	private Map<String, Edge> edges;
 	
+	public Graph createAssociationsNetwork() throws ConverterException, IOException, IDMapperException {
+		log.write("Create association network for pathways in " + directory.getAbsolutePath());
+		pathways = readPathways(directory);
+		log.write("Parsing pathways from " + directory.getAbsolutePath() + "\n... containing " + pathways.size() + " pathways.");
+		for(Pathway pathway : pathways) {
+			List<Node> geneList = new ArrayList<Node>();
+			System.out.println(pathway.getMappInfo().getMapInfoName());
+			log.write("\n> Parse pathway " + pathway.getMappInfo().getMapInfoName() + " with " + pathway.getDataObjects().size() + " pathway elements.\n");
+			int genes = 0;
+			Node p = createPathwayNode(pathway);
+			for(PathwayElement e : pathway.getDataObjects()) {
+				if(e.getXref() != null && !e.getXref().getId().equals("") && e.getXref().getDataSource() != null) {
+					if(e.getDataNodeType().equals("GeneProduct") || e.getDataNodeType().equals("Protein")) {
+						genes++;
+						createNode(e, geneMapper, "En", pathway);
+						if(!geneList.contains(map.get(e))) {
+							geneList.add(map.get(e));
+							Edge edge = graph.addEdge(pathway.getSourceFile().getName() + "_" + genes, p, map.get(e));
+							edge.appendAttribute("Type", "Pathway-Gene Association");
+						}
+					}
+				}
+			}
+			
+			log.write("\tGene count: " + genes + "\n");
+			log.write("\n\n");
+		}
+		
+		for(Pathway p : pathways) {
+			graph.appendAttribute(pathways.indexOf(p) + " Pathway", p.getMappInfo().getMapInfoName());
+		}
+		
+		System.out.println("Conversion finished with " + graph.getNodes().size() + " nodes and " + graph.getEdges().size() + " edges.");
+		log.write("\n\nConversion finished with " + graph.getNodes().size() + " nodes and " + graph.getEdges().size() + " edges.");
+		return graph;
+	}
+	
 	public Graph createNetwork() throws IDMapperException, ConverterException, IOException {
+		log.write("Create merged network for pathways in " + directory.getAbsolutePath());
 		pathways = readPathways(directory);
 		log.write("Parsing pathways from " + directory.getAbsolutePath() + "\n... containing " + pathways.size() + " pathways.");
 		for(Pathway pathway : pathways) {
@@ -376,6 +428,13 @@ public class PathwayMerger {
 		}
 	}
 	
+	private Node createPathwayNode(Pathway p) {
+		Node node = graph.addNode(p.getSourceFile().getName());
+		node.appendAttribute("Label", p.getMappInfo().getMapInfoName());
+		node.appendAttribute("Type", "pathway");
+		return node;
+	}
+		
 	private List<Pathway> readPathways(File directory) throws ConverterException {
 		List<Pathway> list = new ArrayList<Pathway>();
 		
